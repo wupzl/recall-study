@@ -19,6 +19,11 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using Forms=System.Windows.Forms;
 
+[assembly: AssemblyTitle("回想 / Recall")]
+[assembly: AssemblyProduct("Recall Study")]
+[assembly: AssemblyVersion("1.1.0.0")]
+[assembly: AssemblyFileVersion("1.1.0.0")]
+
 namespace Recall {
     [DataContract] public sealed class Entry {
         [DataMember] public string Started;
@@ -30,6 +35,7 @@ namespace Recall {
     [DataContract] public sealed class Store {
         [DataMember] public int Minutes=45;
         [DataMember] public int Volume=70;
+        [DataMember] public int StudyMin=20, StudyMax=30, RestMin=5, RestMax=8;
         [DataMember] public List<Entry> Entries=new List<Entry>();
         [DataMember] public Entry Pending;
         public static readonly string DirectoryPath=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"RecallStudy");
@@ -41,6 +47,8 @@ namespace Recall {
             catch { if(!File.Exists(FilePath+".bak")) throw; data=Read(FilePath+".bak"); }
             if(data.Entries==null) data.Entries=new List<Entry>();
             data.Minutes=Math.Max(1,Math.Min(90,data.Minutes)); data.Volume=Math.Max(10,Math.Min(100,data.Volume));
+            if(!SessionEngine.ValidRange(data.StudyMin,data.StudyMax)){data.StudyMin=20;data.StudyMax=30;}
+            if(!SessionEngine.ValidRange(data.RestMin,data.RestMax)){data.RestMin=5;data.RestMax=8;}
             if(data.Pending!=null) { data.Pending.Result="中断"; data.Entries.Insert(0,data.Pending); data.Pending=null; data.Save(); }
             return data;
         }
@@ -96,9 +104,12 @@ namespace Recall {
         void Run(string[] args) {
             store=Store.Load();
             using(Stream xaml=Assembly.GetExecutingAssembly().GetManifestResourceStream("Recall.MainWindow.xaml")) window=(Window)XamlReader.Load(xaml);
-            window.Height=Math.Min(830,SystemParameters.WorkArea.Height-35);
+            window.Height=Math.Min(930,SystemParameters.WorkArea.Height-35);
             minutes=Find<TextBox>("MinutesInput"); primary=Find<Button>("PrimaryButton"); stop=Find<Button>("StopButton"); volume=Find<Slider>("VolumeSlider");
             minutes.Text=store.Minutes.ToString(); volume.Value=store.Volume; Label("VolumeLabel","提示音 "+store.Volume+"%");
+            Find<TextBox>("StudyMinInput").Text=store.StudyMin.ToString(); Find<TextBox>("StudyMaxInput").Text=store.StudyMax.ToString();
+            Find<TextBox>("RestMinInput").Text=store.RestMin.ToString(); Find<TextBox>("RestMaxInput").Text=store.RestMax.ToString();
+            foreach(string name in RhythmInputs){Find<TextBox>(name).TextChanged+=(s,e)=>Refresh();Find<TextBox>(name).GotKeyboardFocus+=(s,e)=>((TextBox)s).SelectAll();}
             primary.Click+=(s,e)=>Primary(); stop.Click+=(s,e)=>Stop();
             foreach(int preset in new int[]{25,45,60,90}) { int selected=preset; Find<Button>("Preset"+preset).Click+=(s,e)=>{ minutes.Text=selected.ToString(); }; }
             minutes.TextChanged+=(s,e)=>Refresh();
@@ -111,7 +122,7 @@ namespace Recall {
             SetupTray();
             window.StateChanged+=(s,e)=>{ if(window.WindowState==WindowState.Minimized){ window.Hide(); window.ShowInTaskbar=false; } };
             window.Closing+=(s,e)=>{ if(!quitting && engine.Active){ e.Cancel=true; window.Hide(); window.ShowInTaskbar=false; tray.ShowBalloonTip(2500,"学习仍在继续","点击托盘中的回想图标可打开窗口、暂停或结束。",Forms.ToolTipIcon.Info); } };
-            window.Closed+=(s,e)=>{ timer.Stop(); chime.Dispose(); tray.Dispose(); KeepAwake(false); Save(); };
+            window.Closed+=(s,e)=>{ timer.Stop(); chime.Dispose(); tray.Dispose(); KeepAwake(false); ReadRhythm(false); Save(); };
             window.SourceInitialized+=(s,e)=>{ try{ int dark=1; DwmSetWindowAttribute(new WindowInteropHelper(window).Handle,20,ref dark,4); }catch{} };
             Microsoft.Win32.SystemEvents.PowerModeChanged+=PowerModeChanged;
             timer=new DispatcherTimer { Interval=TimeSpan.FromMilliseconds(100) }; timer.Tick+=(s,e)=>Tick(); timer.Start(); Refresh();
@@ -132,8 +143,9 @@ namespace Recall {
             }
             int selected;
             if(!Int32.TryParse(minutes.Text,out selected)||selected<1||selected>90){ Label("ValidationLabel","请输入 1～90 分钟。");minutes.Focus();return; }
+            if(!ReadRhythm(true))return;
             Label("ValidationLabel",""); store.Minutes=selected; started=DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
-            completeMessage=false; engine.Start(selected,Now); KeepAwake(true); Checkpoint(); Refresh();
+            completeMessage=false; engine.Configure(store.StudyMin,store.StudyMax,store.RestMin,store.RestMax); engine.Start(selected,Now); KeepAwake(true); Checkpoint(); Refresh();
         }
         void Tick() {
             if(engine.Active) {
@@ -146,7 +158,7 @@ namespace Recall {
         }
         void Stop() {
             if(!engine.Active)return;
-            if(MessageBox.Show(window,"结束本次学习？已经学习的时间会保存到本机记录。","回想",MessageBoxButton.YesNo,MessageBoxImage.Question)==MessageBoxResult.Yes) { Tick(); if(engine.Active)Finish(false); Refresh(); }
+            if(MessageBox.Show(window,"结束本次学习？已经计时的会话时间会保存到本机记录。","回想",MessageBoxButton.YesNo,MessageBoxImage.Question)==MessageBoxResult.Yes) { Tick(); if(engine.Active)Finish(false); Refresh(); }
         }
         void Finish(bool completed) {
             engine.Stop(Now); KeepAwake(false); chime.Dispose();
@@ -164,29 +176,42 @@ namespace Recall {
         }
         void Sound(string name){ try{chime.Play(name,store.Volume);}catch{Label("ValidationLabel","提示音播放失败，请检查系统声音设备和音量。");} }
         void KeepAwake(bool active){ SetThreadExecutionState(active?0x80000001u:0x80000000u); }
+        static readonly string[] RhythmInputs={"StudyMinInput","StudyMaxInput","RestMinInput","RestMaxInput"};
+        bool ReadRhythm(bool showError){
+            int[] values=new int[4];
+            for(int i=0;i<4;i++)if(!Int32.TryParse(Find<TextBox>(RhythmInputs[i]).Text,out values[i])){
+                if(showError)Label("ValidationLabel","学习和休息范围均需填写整数分钟（1～90）。");return false;
+            }
+            if(!SessionEngine.ValidRange(values[0],values[1])||!SessionEngine.ValidRange(values[2],values[3])){
+                if(showError)Label("ValidationLabel","时间范围应为 1～90 分钟，且下限不能大于上限。");return false;
+            }
+            store.StudyMin=values[0];store.StudyMax=values[1];store.RestMin=values[2];store.RestMax=values[3];return true;
+        }
+        string RangeText(string minName,string maxName){return Find<TextBox>(minName).Text+"～"+Find<TextBox>(maxName).Text+" 分钟";}
         void Refresh() {
             if(minutes==null)return;
             bool active=engine.Active; minutes.IsEnabled=!active;
+            foreach(string name in RhythmInputs)Find<TextBox>(name).IsEnabled=!active;
             foreach(int n in new int[]{25,45,60,90}) Find<Button>("Preset"+n).IsEnabled=!active;
             primary.Content=active?(engine.Paused?"继续学习  →":"暂停学习"):"开始学习  →";
             stop.Visibility=active?Visibility.Visible:Visibility.Collapsed;
             long now=Now;
             double fraction=1;
             if(active){
-                Label("PhaseLabel",engine.Paused?"已暂停":engine.Reviewing?"闭眼回顾":"专注学习");
-                Label("ClockLabel",Time(engine.PhaseRemaining(now)));Label("ClockCaption",engine.Reviewing?"回顾剩余时间":"距离下次回顾");
-                Label("StateTitle",engine.Paused?"按自己的节奏来":engine.Reviewing?"闭上眼睛，回想一下":"保持专注，提示音会提醒你");
-                Label("StateHint",engine.Paused?"计时已冻结。\n准备好后，继续刚才的节奏。":engine.Reviewing?"刚才学到了什么？\n试着在脑海里复述关键内容。":"不必看倒计时。\n继续学习，直到听见下一声提醒。");
-                Label("TotalLabel","本次剩余 "+Time(engine.Remaining(now))); Label("ReviewLabel","已回顾 "+engine.Reviews+" 次 · 总计划 "+engine.TargetMs/60000+" 分钟");
+                Label("PhaseLabel",engine.Paused?"已暂停":engine.Reviewing?"安静休息":"专注学习");
+                Label("ClockLabel",Time(engine.PhaseRemaining(now)));Label("ClockCaption",engine.Reviewing?"距离继续学习":"距离下次休息");
+                Label("StateTitle",engine.Paused?"按自己的节奏来":engine.Reviewing?"放松一下，暂时离开屏幕":"保持专注，提示音会提醒你");
+                Label("StateHint",engine.Paused?"计时已冻结。\n准备好后，继续刚才的节奏。":engine.Reviewing?"安静休息，不必刻意回忆。\n结束时会自动提示继续学习。":"不必看倒计时。\n继续学习，直到听见下一声提醒。");
+                Label("TotalLabel","本次剩余 "+Time(engine.Remaining(now))); Label("ReviewLabel","已休息 "+engine.Reviews+" 次 · 总计划 "+engine.TargetMs/60000+" 分钟");
                 fraction=(double)engine.PhaseRemaining(now)/Math.Min(engine.PhaseLength,engine.TargetMs-(engine.PhaseEnd-engine.PhaseLength));
             } else {
                 int planned; if(!Int32.TryParse(minutes.Text,out planned)||planned<1||planned>90)planned=store.Minutes;
                 Label("PhaseLabel",completeMessage?"本次学习已保存":"准备开始");Label("ClockLabel",Time(planned*60000L)); Label("ClockCaption","本次计划");
-                Label("StateTitle",completeMessage?"又积累了一点，辛苦了":"按自己的节奏来");Label("StateHint","开始后，不必盯着屏幕。\n听到提示音时，闭眼回想刚才学了什么。");
-                Label("TotalLabel","每隔 3～5 分钟 · 随机提醒"); Label("ReviewLabel","闭眼 20 秒后，自动提示继续");
+                Label("StateTitle",completeMessage?"又积累了一点，辛苦了":"按自己的节奏来");Label("StateHint","开始后，不必盯着屏幕。\n听到提示音时，放松并安静休息。");
+                Label("TotalLabel","随机学习 "+RangeText("StudyMinInput","StudyMaxInput")); Label("ReviewLabel","随机休息 "+RangeText("RestMinInput","RestMaxInput"));
             }
             DrawArc(fraction,active && engine.Reviewing);
-            if(tray!=null){tray.Text=active?"回想 · "+(engine.Paused?"已暂停":engine.Reviewing?"闭眼回顾":"学习中")+" · "+Time(engine.Remaining(now)):"回想 · 开始一次学习"; trayToggle.Enabled=active; trayToggle.Text=engine.Paused?"继续学习":"暂停学习";}
+            if(tray!=null){tray.Text=active?"回想 · "+(engine.Paused?"已暂停":engine.Reviewing?"安静休息":"学习中")+" · "+Time(engine.Remaining(now)):"回想 · 开始一次学习"; trayToggle.Enabled=active; trayToggle.Text=engine.Paused?"继续学习":"暂停学习";}
         }
         void DrawArc(double fraction,bool reviewing){
             double angle=Math.Max(.001,Math.Min(.9999,fraction))*Math.PI*2;
@@ -202,7 +227,7 @@ namespace Recall {
             StackPanel list=Find<StackPanel>("HistoryItems"); list.Children.Clear();
             foreach(Entry e in store.Entries){
                 StackPanel content=new StackPanel();content.Children.Add(new TextBlock {Text=e.Started+"    "+e.Result,FontSize=15,Foreground=new SolidColorBrush((Color)ColorConverter.ConvertFromString(e.Result=="已完成"?"#A4E5C7":"#EDCA8F"))});
-                content.Children.Add(new TextBlock {Text="已学习 "+Time(e.Elapsed)+" / "+e.Target/60000+" 分钟    ·    回顾 "+e.Reviews+" 次",FontSize=12,Margin=new Thickness(0,10,0,0),Foreground=new SolidColorBrush((Color)ColorConverter.ConvertFromString("#95AAA5"))});
+                content.Children.Add(new TextBlock {Text="会话用时 "+Time(e.Elapsed)+" / "+e.Target/60000+" 分钟    ·    间歇 "+e.Reviews+" 次",FontSize=12,Margin=new Thickness(0,10,0,0),Foreground=new SolidColorBrush((Color)ColorConverter.ConvertFromString("#95AAA5"))});
                 list.Children.Add(new Border {Background=new SolidColorBrush((Color)ColorConverter.ConvertFromString("#182626")),CornerRadius=new CornerRadius(14),Padding=new Thickness(20),Margin=new Thickness(0,0,0,12),Child=content});
             }
         }
@@ -223,6 +248,7 @@ namespace Recall {
         void Capture(string path){
             var visual=window.Content as System.Windows.Media.Visual;
             var element=window.Content as FrameworkElement;
+            element.UpdateLayout();
             var bitmap=new System.Windows.Media.Imaging.RenderTargetBitmap((int)element.ActualWidth,(int)element.ActualHeight,96,96,PixelFormats.Pbgra32);
             bitmap.Render(visual);var encoder=new System.Windows.Media.Imaging.PngBitmapEncoder();encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));
             using(FileStream output=File.Create(path))encoder.Save(output);

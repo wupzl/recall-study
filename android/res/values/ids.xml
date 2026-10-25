@@ -1,0 +1,7 @@
+<resources>
+    <item name="total_minutes" type="id" />
+    <item name="study_min" type="id" />
+    <item name="study_max" type="id" />
+    <item name="rest_min" type="id" />
+    <item name="rest_max" type="id" />
+</resources>

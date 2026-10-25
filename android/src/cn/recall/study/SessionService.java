@@ -33,6 +33,9 @@ public final class SessionService extends Service {
         if ("START".equals(action) && !engine.active) {
             handler.removeCallbacksAndMessages(null); chime.close();
             int minutes = Math.max(1, Math.min(90, intent.getIntExtra("minutes", 45)));
+            try {
+                engine.configure(Store.prefs(this).getInt("studyMin",20),Store.prefs(this).getInt("studyMax",30),Store.prefs(this).getInt("restMin",5),Store.prefs(this).getInt("restMax",8));
+            } catch(IllegalArgumentException invalid) { engine.configure(20,30,5,8); }
             Store.recoverInterrupted(this);
             engine.start(minutes, now()); started = System.currentTimeMillis(); recorded = false;
             if (Build.VERSION.SDK_INT >= 34) startForeground(1, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
@@ -55,7 +58,7 @@ public final class SessionService extends Service {
             int event = engine.advance(now());
             if (event == SessionEngine.COMPLETE) { finish(true); return; }
             if (event != SessionEngine.NONE) {
-                Log.i("RecallTimer", (event == SessionEngine.RECALL ? "RECALL" : "STUDY") + " elapsed=" + engine.elapsed(now()));
+                Log.i("RecallTimer", (event == SessionEngine.RECALL ? "REST" : "STUDY") + " elapsed=" + engine.elapsed(now()));
                 chime.play(SessionService.this, event == SessionEngine.RECALL ? "recall" : "continue");
                 checkpoint(); updateNotification();
             }
@@ -72,8 +75,8 @@ public final class SessionService extends Service {
     }
     private Notification notification() {
         PendingIntent open = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class), PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-        String title = engine.paused ? "学习已暂停" : engine.reviewing ? "闭眼回顾 · 20 秒" : "专注学习中";
-        String text = "本次剩余 " + time(engine.remaining(now())) + " · 已回顾 " + engine.reviews + " 次";
+        String title = engine.paused ? "计时已暂停" : engine.reviewing ? "安静休息中" : "专注学习中";
+        String text = "本次剩余 " + time(engine.remaining(now())) + " · 已休息 " + engine.reviews + " 次";
         Notification.Builder builder = new Notification.Builder(this, CHANNEL)
             .setSmallIcon(cn.recall.study.R.drawable.ic_notification).setContentTitle(title).setContentText(text)
             .setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true).setCategory(Notification.CATEGORY_STOPWATCH)

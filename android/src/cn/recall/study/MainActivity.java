@@ -22,6 +22,8 @@ public final class MainActivity extends Activity {
     private static final int BG = Color.rgb(16,26,27), PANEL = Color.rgb(24,38,38), MINT = Color.rgb(164,229,199), TEXT = Color.rgb(239,245,239), MUTED = Color.rgb(149,170,165);
     private LinearLayout root;
     private EditText minutes;
+    private EditText[] rangeInputs;
+    private static final String[] RANGE_KEYS={"studyMin","studyMax","restMin","restMax"};
     private Button primary, stop;
     private TextView status, caption, volumeLabel, permissions;
     private Dial dial;
@@ -67,19 +69,29 @@ public final class MainActivity extends Activity {
         space(root, 28);
         TextView eyebrow = text("给记忆一点留白", 12, MINT); eyebrow.setLetterSpacing(.15f); root.addView(eyebrow); space(root,12);
         TextView title = text("专注一会儿，\n记住多一点。", 31, TEXT); title.setTypeface(null,Typeface.BOLD); title.setLineSpacing(dp(5),1); root.addView(title);
-        space(root,10); root.addView(text("每隔随机 3～5 分钟，闭眼回顾 20 秒。",13,MUTED)); space(root,18);
+        space(root,10); root.addView(text("随机学习与休息，节奏由你设置。",13,MUTED)); space(root,18);
         status = text("准备好，开始一次学习",14,MINT); status.setGravity(Gravity.CENTER); root.addView(status);
         dial = new Dial(); root.addView(dial,new LinearLayout.LayoutParams(-1,dp(242)));
         caption = text("随机提醒，不必盯着时间",13,MUTED); caption.setGravity(Gravity.CENTER); root.addView(caption); space(root,24);
-        LinearLayout duration = row(); duration.addView(text("本次学习",14,TEXT),new LinearLayout.LayoutParams(0,dp(40),1));
+        LinearLayout duration = row(); duration.addView(text("本次总时长",14,TEXT),new LinearLayout.LayoutParams(0,dp(40),1));
         minutes = new EditText(this); minutes.setSingleLine(true); minutes.setTextColor(TEXT); minutes.setTextSize(20); minutes.setGravity(Gravity.CENTER);
         minutes.setInputType(InputType.TYPE_CLASS_NUMBER); minutes.setFilters(new InputFilter[]{new InputFilter.LengthFilter(3)});
         minutes.setSelectAllOnFocus(true); minutes.setText(String.valueOf(Store.prefs(this).getInt("minutes",45))); minutes.setBackground(shape(PANEL,10));
+        minutes.setId(R.id.total_minutes); minutes.setContentDescription("本次总时长，分钟");
         duration.addView(minutes,new LinearLayout.LayoutParams(dp(68),dp(44))); TextView unit=text("  分钟",14,MUTED); duration.addView(unit); root.addView(duration); space(root,12);
         LinearLayout presets=row(); for (int n : new int[]{25,45,60,90}) { Button b=button(n+" 分钟",false); b.setTextSize(13); b.setOnClickListener(v -> { if (current()==null) { minutes.setText(String.valueOf(n)); dial.invalidate(); } }); presets.addView(b,weight(3)); } root.addView(presets); space(root,18);
+        rangeInputs=new EditText[4]; int[] defaults={20,30,5,8}; int[] ids={R.id.study_min,R.id.study_max,R.id.rest_min,R.id.rest_max};
+        for(int i=0;i<4;i++){
+            EditText field=new EditText(this); field.setId(ids[i]); field.setSingleLine(true); field.setInputType(InputType.TYPE_CLASS_NUMBER); field.setFilters(new InputFilter[]{new InputFilter.LengthFilter(2)});
+            field.setTextColor(TEXT); field.setTextSize(17); field.setGravity(Gravity.CENTER); field.setSelectAllOnFocus(true); field.setBackground(shape(BG,10));
+            field.setText(String.valueOf(Store.prefs(this).getInt(RANGE_KEYS[i],defaults[i]))); field.setContentDescription(new String[]{"学习下限，分钟","学习上限，分钟","休息下限，分钟","休息上限，分钟"}[i]); rangeInputs[i]=field;
+        }
+        LinearLayout rhythm=new LinearLayout(this); rhythm.setOrientation(LinearLayout.VERTICAL); rhythm.setPadding(dp(16),dp(16),dp(16),dp(16)); rhythm.setBackground(shape(PANEL,18));
+        rhythm.addView(rangeRow("学习范围",rangeInputs[0],rangeInputs[1])); space(rhythm,12); rhythm.addView(rangeRow("休息范围",rangeInputs[2],rangeInputs[3]));
+        space(rhythm,12); rhythm.addView(text("各填 1～90 分钟，每轮重新随机。\n上下限相同即为固定时长，开始后锁定本次节奏。",11,MUTED)); root.addView(rhythm); space(root,18);
         primary = button("开始学习  →",true); root.addView(primary,new LinearLayout.LayoutParams(-1,dp(54))); primary.setOnClickListener(v -> primaryClick()); space(root,10);
         stop = button("提前结束",false); stop.setVisibility(View.GONE); root.addView(stop,new LinearLayout.LayoutParams(-1,dp(48)));
-        stop.setOnClickListener(v -> new AlertDialog.Builder(this).setTitle("结束本次学习？").setMessage("已经学习的时间会保存到本机记录。").setNegativeButton("继续学习",null).setPositiveButton("结束并保存",(d,w) -> command("STOP")).show());
+        stop.setOnClickListener(v -> new AlertDialog.Builder(this).setTitle("结束本次学习？").setMessage("已经计时的会话时间会保存到本机记录。").setNegativeButton("继续学习",null).setPositiveButton("结束并保存",(d,w) -> command("STOP")).show());
         space(root,24);
         LinearLayout soundPanel=new LinearLayout(this); soundPanel.setOrientation(LinearLayout.VERTICAL); soundPanel.setPadding(dp(16),dp(16),dp(16),dp(16)); soundPanel.setBackground(shape(PANEL,18));
         LinearLayout soundHeader=row(); volumeLabel=text("提示音 · 70%",14,TEXT); soundHeader.addView(volumeLabel,new LinearLayout.LayoutParams(0,-2,1));
@@ -87,17 +99,31 @@ public final class MainActivity extends Activity {
         test.setOnClickListener(v -> { preview.play(this,"recall"); if (preview.error != null) Toast.makeText(this,preview.error,Toast.LENGTH_LONG).show(); }); soundPanel.addView(soundHeader);
         SeekBar volume=new SeekBar(this); volume.setMax(90); volume.setProgress(Store.prefs(this).getInt("volume",70)-10); volumeLabel.setText("提示音 · "+(volume.getProgress()+10)+"%");
         volume.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){ public void onStartTrackingTouch(SeekBar s){} public void onStopTrackingTouch(SeekBar s){} public void onProgressChanged(SeekBar s,int progress,boolean user){ volumeLabel.setText("提示音 · "+(progress+10)+"%"); Store.prefs(MainActivity.this).edit().putInt("volume",progress+10).apply(); }});
-        soundPanel.addView(volume); space(soundPanel,8); soundPanel.addView(text("闭眼和继续使用不同音色。试听时可用音量键\n调节系统闹钟音量；勿扰模式可能影响响铃。",12,MUTED)); root.addView(soundPanel); space(root,18);
+        soundPanel.addView(volume); space(soundPanel,8); soundPanel.addView(text("休息和继续使用不同音色。试听时可用音量键\n调节系统闹钟音量；勿扰模式可能影响响铃。",12,MUTED)); root.addView(soundPanel); space(root,18);
         permissions=text("",12,MUTED); permissions.setLineSpacing(dp(4),1); root.addView(permissions); permissions.setOnClickListener(v -> backgroundSettings());
-        space(root,14); TextView footer=text("离线使用 · 记录仅保存在此设备\n回顾包含在总时长内，到点自动结束",11,MUTED); footer.setLineSpacing(dp(5),1); footer.setGravity(Gravity.CENTER); root.addView(footer);
+        space(root,14); TextView footer=text("离线使用 · 记录仅保存在此设备\n休息包含在总时长内，最多 90 分钟，到点自动结束",11,MUTED); footer.setLineSpacing(dp(5),1); footer.setGravity(Gravity.CENTER); root.addView(footer);
         refresh();
     }
     private SessionService current() { SessionService s=SessionService.instance; return s!=null && s.engine.active ? s : null; }
+    private LinearLayout rangeRow(String label,EditText min,EditText max){
+        LinearLayout line=row(); line.addView(text(label,13,TEXT),new LinearLayout.LayoutParams(0,-2,1));
+        line.addView(min,new LinearLayout.LayoutParams(dp(48),dp(42))); TextView sep=text(" ～ ",13,MUTED); line.addView(sep);
+        line.addView(max,new LinearLayout.LayoutParams(dp(48),dp(42))); line.addView(text(" 分钟",12,MUTED)); return line;
+    }
+    private boolean saveRhythm(boolean showError){
+        if(rangeInputs==null||current()!=null)return false;
+        int[] values=new int[4];
+        for(int i=0;i<4;i++)try{values[i]=Integer.parseInt(rangeInputs[i].getText().toString());}catch(Exception ex){if(showError)rangeInputs[i].setError("请输入整数分钟（1～90）");return false;}
+        for(int i=0;i<4;i+=2)if(!SessionEngine.validRange(values[i],values[i+1])){if(showError){rangeInputs[i].setError("范围应为 1～90 分钟，下限不能大于上限");rangeInputs[i].requestFocus();}return false;}
+        android.content.SharedPreferences.Editor edit=Store.prefs(this).edit();
+        for(int i=0;i<4;i++){rangeInputs[i].setError(null);edit.putInt(RANGE_KEYS[i],values[i]);}edit.apply();return true;
+    }
     private void command(String action) { startService(new Intent(this,SessionService.class).setAction(action)); }
     private void primaryClick() {
         if(current()!=null){ command("TOGGLE"); return; }
         try { requestedMinutes=Integer.parseInt(minutes.getText().toString()); } catch(Exception e){ requestedMinutes=0; }
         if(requestedMinutes<1 || requestedMinutes>90){ minutes.setError("请输入 1～90 分钟"); return; }
+        if(!saveRhythm(true))return;
         pendingStart=true; continueStart();
     }
     private boolean batteryReady() { return ((PowerManager)getSystemService(POWER_SERVICE)).isIgnoringBatteryOptimizations(getPackageName()); }
@@ -109,7 +135,7 @@ public final class MainActivity extends Activity {
             pendingStart=false; new AlertDialog.Builder(this).setTitle("请开启学习通知").setMessage("通知用于锁屏查看计时，并随时暂停或结束学习。").setNegativeButton("稍后",null).setPositiveButton("打开设置",(d,w)->startActivity(new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE,getPackageName()))).show(); return;
         }
         if(!batteryReady()) {
-            pendingStart=false; new AlertDialog.Builder(this).setTitle("允许锁屏后继续计时").setMessage("为让每隔 3～5 分钟的提醒在锁屏后正常工作，请允许“回想”不受电池优化限制。设置后再次点击开始。").setNegativeButton("稍后",null).setPositiveButton("设置后台运行",(d,w)->requestBattery()).show(); return;
+            pendingStart=false; new AlertDialog.Builder(this).setTitle("允许锁屏后继续计时").setMessage("为让学习和休息提醒在锁屏后正常工作，请允许“回想”不受电池优化限制。设置后再次点击开始。").setNegativeButton("稍后",null).setPositiveButton("设置后台运行",(d,w)->requestBattery()).show(); return;
         }
         pendingStart=false; preview.close(); Store.prefs(this).edit().putInt("minutes",requestedMinutes).apply();
         getSystemService(NotificationManager.class).cancel(2);
@@ -127,13 +153,14 @@ public final class MainActivity extends Activity {
     public void onRequestPermissionsResult(int code,String[] names,int[] results){ super.onRequestPermissionsResult(code,names,results); if(code==7){ if(results.length>0 && results[0]==PackageManager.PERMISSION_GRANTED) continueStart(); else { pendingStart=false; Toast.makeText(this,"请开启通知权限后再开始",Toast.LENGTH_LONG).show(); } } }
     private final Runnable refreshLoop=new Runnable(){ public void run(){ refresh(); handler.postDelayed(this,250); }};
     protected void onResume(){ super.onResume(); handler.removeCallbacks(refreshLoop); handler.post(refreshLoop); }
-    protected void onPause(){ handler.removeCallbacks(refreshLoop); preview.close(); super.onPause(); }
+    protected void onPause(){ handler.removeCallbacks(refreshLoop); preview.close(); saveRhythm(false); super.onPause(); }
     protected void onDestroy(){ preview.close(); handler.removeCallbacksAndMessages(null); super.onDestroy(); }
     private void refresh(){
         if(primary==null)return;
         SessionService s=current(); boolean running=s!=null;
         minutes.setEnabled(!running); primary.setText(running?(s.engine.paused?"继续学习  →":"暂停学习"):"开始学习  →"); stop.setVisibility(running?View.VISIBLE:View.GONE);
-        if(running){ SessionEngine e=s.engine; status.setText(e.paused?"已暂停 · 按自己的节奏来":e.reviewing?"闭上眼睛，回想刚才学了什么":"专注学习 · 下一次回顾即将到来"); caption.setText("本次剩余 "+SessionService.time(e.remaining(SessionService.now()))+"  ·  已回顾 "+e.reviews+" 次"); if(s.chime.error!=null)caption.setText(s.chime.error); }
+        for(EditText field:rangeInputs)field.setEnabled(!running);
+        if(running){ SessionEngine e=s.engine; status.setText(e.paused?"已暂停 · 按自己的节奏来":e.reviewing?"安静休息，不必刻意回忆":"专注学习 · 结束时会提醒休息"); caption.setText("本次剩余 "+SessionService.time(e.remaining(SessionService.now()))+"  ·  已休息 "+e.reviews+" 次"); if(s.chime.error!=null)caption.setText(s.chime.error); }
         else { status.setText(wasActive?"本次学习已保存，辛苦了":"准备好，开始一次学习"); caption.setText("随机提醒，不必盯着时间"); }
         permissions.setText("后台提醒："+(notificationReady()&&batteryReady()?"权限已就绪":"需要设置")+"  ·  点击检查设置  ›");
         wasActive=running || wasActive; dial.invalidate();
@@ -142,7 +169,7 @@ public final class MainActivity extends Activity {
         JSONArray history=Store.history(this); LinearLayout list=new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL); list.setPadding(dp(22),dp(12),dp(22),dp(12));
         if(history.length()==0)list.addView(text("还没有学习记录。\n从一次专注开始吧。",15,TEXT));
         SimpleDateFormat format=new SimpleDateFormat("MM月dd日 HH:mm",Locale.CHINA);
-        for(int i=0;i<history.length();i++)try{ JSONObject r=history.getJSONObject(i); TextView item=text(format.format(new Date(r.getLong("started")))+"   "+r.getString("result")+"\n已学习 "+SessionService.time(r.getLong("elapsed"))+" / "+r.getLong("target")/60000+" 分钟 · 回顾 "+r.getInt("reviews")+" 次",14,TEXT); item.setLineSpacing(dp(8),1); item.setPadding(0,dp(12),0,dp(12)); list.addView(item); }catch(Exception ignored){}
+        for(int i=0;i<history.length();i++)try{ JSONObject r=history.getJSONObject(i); TextView item=text(format.format(new Date(r.getLong("started")))+"   "+r.getString("result")+"\n会话用时 "+SessionService.time(r.getLong("elapsed"))+" / "+r.getLong("target")/60000+" 分钟 · 间歇 "+r.getInt("reviews")+" 次",14,TEXT); item.setLineSpacing(dp(8),1); item.setPadding(0,dp(12),0,dp(12)); list.addView(item); }catch(Exception ignored){}
         ScrollView scroll=new ScrollView(this); scroll.addView(list); new AlertDialog.Builder(this).setTitle("学习记录 · 仅本机").setView(scroll).setPositiveButton("完成",null).show();
     }
     private final class Dial extends View {
@@ -151,7 +178,7 @@ public final class MainActivity extends Activity {
         protected void onDraw(Canvas canvas){
             super.onDraw(canvas); float cx=getWidth()/2f,cy=getHeight()/2f,r=dp(101); SessionService s=current();
             float progress=1; String value="准备开始",label="一次专注，一点积累"; int color=MINT;
-            if(s!=null){ long now=SessionService.now(); SessionEngine e=s.engine; long remaining=e.phaseRemaining(now); progress=(float)remaining/(float)Math.min(e.phaseLength,e.targetMs-(e.phaseEnd-e.phaseLength)); value=SessionService.time(remaining); label=e.paused?"已暂停":e.reviewing?"闭眼回顾":"距离下次回顾"; if(e.reviewing)color=Color.rgb(237,202,143); }
+            if(s!=null){ long now=SessionService.now(); SessionEngine e=s.engine; long remaining=e.phaseRemaining(now); progress=(float)remaining/(float)Math.min(e.phaseLength,e.targetMs-(e.phaseEnd-e.phaseLength)); value=SessionService.time(remaining); label=e.paused?"已暂停":e.reviewing?"距离继续学习":"距离下次休息"; if(e.reviewing)color=Color.rgb(237,202,143); }
             p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(dp(4)); p.setColor(Color.rgb(41,61,57)); canvas.drawCircle(cx,cy,r,p);
             p.setColor(color);p.setStrokeCap(Paint.Cap.ROUND);canvas.drawArc(new RectF(cx-r,cy-r,cx+r,cy+r),-90,Math.min(1,Math.max(0,progress))*359.9f,false,p);
             p.setStyle(Paint.Style.FILL);p.setTextAlign(Paint.Align.CENTER);p.setColor(TEXT);p.setTypeface(Typeface.create("sans-serif-light",Typeface.NORMAL));p.setTextSize(dp(s==null?28:49));canvas.drawText(value,cx,cy+dp(9),p);
