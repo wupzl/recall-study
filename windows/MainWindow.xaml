@@ -1,0 +1,63 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="回想 · 学习与回顾" Width="1000" Height="830" MinWidth="820" MinHeight="650" Background="#101A1B" Foreground="#EFF5EF" FontFamily="Microsoft YaHei UI" WindowStartupLocation="CenterScreen">
+  <Window.Resources>
+    <SolidColorBrush x:Key="Muted" Color="#95AAA5" />
+    <Style TargetType="Button">
+      <Setter Property="Cursor" Value="Hand"/><Setter Property="Foreground" Value="#EFF5EF"/><Setter Property="Background" Value="#203432"/><Setter Property="FontSize" Value="14"/><Setter Property="Padding" Value="18,12"/><Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="Box" Background="{TemplateBinding Background}" CornerRadius="12" Padding="{TemplateBinding Padding}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Box" Property="Opacity" Value="0.82"/></Trigger><Trigger Property="IsEnabled" Value="False"><Setter TargetName="Box" Property="Opacity" Value="0.4"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+    </Style>
+    <Style TargetType="TextBlock"><Setter Property="TextWrapping" Value="Wrap"/></Style>
+    <Style TargetType="TextBox"><Setter Property="Foreground" Value="#EFF5EF"/><Setter Property="Background" Value="#203432"/><Setter Property="BorderThickness" Value="0"/><Setter Property="CaretBrush" Value="#A4E5C7"/><Setter Property="Padding" Value="10,6"/><Setter Property="VerticalContentAlignment" Value="Center"/></Style>
+  </Window.Resources>
+  <Grid Background="#101A1B">
+    <Grid.ColumnDefinitions><ColumnDefinition Width="184"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+    <Border Background="#152222" BorderBrush="#253735" BorderThickness="0,0,1,0">
+      <Grid Margin="22,30,20,24">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <StackPanel><TextBlock Text="回想" FontSize="30" FontWeight="SemiBold" Foreground="#A4E5C7"/><TextBlock Text="R E C A L L" FontSize="11" Foreground="#95AAA5" Margin="2,5,0,34"/></StackPanel>
+        <StackPanel Grid.Row="1"><Button Name="FocusTab" Content="◷   开始学习" HorizontalContentAlignment="Left" Background="#29443B" Margin="0,0,0,10"/><Button Name="HistoryTab" Content="≡   学习记录" Background="Transparent"/></StackPanel>
+        <StackPanel Grid.Row="3"><Border Height="1" Background="#2B3D38" Margin="0,0,0,20"/><TextBlock Text="给记忆一点留白" FontSize="13" Foreground="#A4E5C7"/><TextBlock Text="离线使用，无需账号。&#x0a;每一次积累，只留在本机。" FontSize="11" Foreground="#95AAA5" LineHeight="21" Margin="0,9,0,0"/></StackPanel>
+      </Grid>
+    </Border>
+    <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+      <Grid Margin="36,28,36,24">
+        <StackPanel Name="FocusPanel">
+          <TextBlock Text="F O C U S   /   0 1" FontSize="11" Foreground="#A4E5C7" Margin="0,0,0,12"/>
+          <TextBlock Text="专注一会儿，记住多一点。" FontSize="29" FontWeight="SemiBold"/>
+          <TextBlock Text="随机回顾，让刚学到的知识沉淀下来。" FontSize="13" Foreground="#95AAA5" Margin="0,9,0,22"/>
+          <Border Background="#182626" CornerRadius="22" Padding="16,16,24,16">
+            <Grid>
+              <Grid.ColumnDefinitions><ColumnDefinition Width="276"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+              <Grid Width="258" Height="258">
+                <Ellipse Width="226" Height="226" Stroke="#2A403A" StrokeThickness="4"/>
+                <Canvas Width="258" Height="258"><Path Name="ProgressArc" Stroke="#A4E5C7" StrokeThickness="4" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/></Canvas>
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                  <TextBlock Name="PhaseLabel" Text="准备开始" Foreground="#A4E5C7" FontSize="13" HorizontalAlignment="Center" Margin="0,0,0,9"/>
+                  <TextBlock Name="ClockLabel" Text="45:00" FontFamily="Segoe UI Light" FontSize="53" HorizontalAlignment="Center"/>
+                  <TextBlock Name="ClockCaption" Text="本次计划" Foreground="#95AAA5" FontSize="12" HorizontalAlignment="Center" Margin="0,8,0,0"/>
+                </StackPanel>
+              </Grid>
+              <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="15,0,0,0">
+                <TextBlock Name="StateTitle" Text="按自己的节奏来" Foreground="#A4E5C7" FontSize="17" FontWeight="SemiBold"/>
+                <TextBlock Name="StateHint" Text="开始后，不必盯着屏幕。&#x0a;听到提示音时，闭眼回想刚才学了什么。" Foreground="#95AAA5" FontSize="12" LineHeight="22" Margin="0,12,0,22"/>
+                <TextBlock Name="TotalLabel" Text="每隔 3～5 分钟 · 随机提醒" FontSize="12"/>
+                <TextBlock Name="ReviewLabel" Text="闭眼 20 秒后，自动提示继续" FontSize="12" Foreground="#95AAA5" Margin="0,8,0,0"/>
+              </StackPanel>
+            </Grid>
+          </Border>
+          <Grid Margin="0,22,0,14"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel VerticalAlignment="Center"><TextBlock Text="本次学习" FontSize="15"/><TextBlock Text="包含回顾时间，最多 90 分钟" FontSize="11" Foreground="#95AAA5" Margin="0,5,0,0"/></StackPanel><TextBox Name="MinutesInput" Grid.Column="1" Width="75" Height="45" FontSize="22" TextAlignment="Center" MaxLength="3" Text="45"/><TextBlock Grid.Column="2" Text="分钟" FontSize="13" Foreground="#95AAA5" VerticalAlignment="Center" Margin="10,0,0,0"/></Grid>
+          <UniformGrid Columns="4" Margin="-4,0,-4,17"><Button Name="Preset25" Content="25 分钟" Margin="4,0"/><Button Name="Preset45" Content="45 分钟" Margin="4,0"/><Button Name="Preset60" Content="60 分钟" Margin="4,0"/><Button Name="Preset90" Content="90 分钟" Margin="4,0"/></UniformGrid>
+          <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><Button Name="PrimaryButton" Content="开始学习  →" Background="#A4E5C7" Foreground="#10251E" FontSize="16" Padding="18,15"/><Button Name="StopButton" Grid.Column="1" Content="提前结束" Visibility="Collapsed" Margin="12,0,0,0"/></Grid>
+          <TextBlock Name="ValidationLabel" Text="" Foreground="#EDCA8F" FontSize="12" Margin="0,8,0,0"/>
+          <Border CornerRadius="16" Background="#182626" Padding="17,13" Margin="0,6,0,0"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Name="VolumeLabel" Text="提示音 70%" FontSize="12" VerticalAlignment="Center"/><Slider Name="VolumeSlider" Grid.Column="1" Minimum="10" Maximum="100" Value="70" VerticalAlignment="Center" Margin="18,0"/><Button Name="PreviewButton" Grid.Column="2" Content="试听" FontSize="12" Padding="16,9"/></Grid></Border>
+          <TextBlock Text="最小化或关闭窗口后，学习会继续在托盘运行。暂停会冻结全部计时。" FontSize="11" Foreground="#95AAA5" Margin="0,13,0,0"/>
+        </StackPanel>
+        <StackPanel Name="HistoryPanel" Visibility="Collapsed">
+          <TextBlock Text="Y O U R   P R O G R E S S" FontSize="11" Foreground="#A4E5C7" Margin="0,0,0,12"/>
+          <TextBlock Text="每一次专注，都算数。" FontSize="29" FontWeight="SemiBold"/>
+          <TextBlock Name="HistorySummary" Foreground="#95AAA5" FontSize="13" Margin="0,12,0,24"/>
+          <StackPanel Name="HistoryItems"/>
+        </StackPanel>
+      </Grid>
+    </ScrollViewer>
+  </Grid>
+</Window>

@@ -1,0 +1,12 @@
+build/
+.keys/
+__pycache__/
+dist/
+qa/
+*.jks
+*.keystore
+*.p12
+*.pfx
+password.txt
+.env
+.env.*
